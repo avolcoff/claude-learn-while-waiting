@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Fixed: the video kept playing after Claude finished when it had only just opened; pausing now retries for a few seconds.
+- Fixed: the browser no longer comes forward if Claude finished while the video was opening.
+- A new video now reuses the browser tab already showing YouTube instead of opening another tab each time. It opens a new tab only when there is none, or when that window can't be brought to the front.
+
 ## 0.3.0
 
 - Fixed: turning the mod off with `/learn off` while a wait was running still opened a video when the wait ended.

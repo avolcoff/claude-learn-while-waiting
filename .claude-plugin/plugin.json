@@ -1,6 +1,6 @@
 {
   "name": "learn-while-waiting",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Swaps the thinking spinner for a short educational YouTube video to watch while Claude works",
   "author": {
     "name": "avolcoff"

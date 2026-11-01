@@ -148,6 +148,50 @@ const hideVideo = async ($: EngineInterface) => {
   } catch {}
 }
 
+// Points the browser window that already shows YouTube at a new address, so a
+// new video reuses its tab instead of opening another. Prints 'ok' only when
+// that window really had the focus for the typing, else nothing was typed.
+const navigateScript = (url: string) => `
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type @'
+using System; using System.Runtime.InteropServices;
+public class N {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte b, byte s, uint f, UIntPtr e);
+}
+'@
+$w = Get-Process chrome, msedge, firefox, brave -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -match 'YouTube' } | Select-Object -First 1
+if ($w) {
+  $h = $w.MainWindowHandle
+  if ([N]::IsIconic($h)) { [N]::ShowWindow($h, 9) | Out-Null }
+  [N]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero); [N]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
+  [N]::SetForegroundWindow($h) | Out-Null
+  Start-Sleep -Milliseconds 400
+  $front = [N]::GetForegroundWindow()
+  if ($front.ToInt64() -eq $h.ToInt64()) {
+    [System.Windows.Forms.SendKeys]::SendWait('^l')
+    Start-Sleep -Milliseconds 200
+    [System.Windows.Forms.SendKeys]::SendWait('${url.replace(/[+^%~(){}[\]]/g, '{$&}').replace(/'/g, "''")}')
+    [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+    'ok'
+  }
+}
+`
+
+// True when the existing YouTube tab was sent to the address.
+const reuseTab = async ($: EngineInterface, url: string) => {
+  try {
+    const ran = await $.process.run(powershell(navigateScript(url)))
+
+    return ran.exitCode === 0 && ran.stdout.trim() === 'ok'
+  } catch {
+    return false
+  }
+}
+
 const videoAt = (index: number) => VIDEOS[((index % VIDEOS.length) + VIDEOS.length) % VIDEOS.length]!
 
 const urlOf = (video: (typeof VIDEOS)[number]) =>
@@ -170,11 +214,14 @@ const playableUrlOf = async ($: EngineInterface, video: (typeof VIDEOS)[number])
 const watch = async ($: EngineInterface) => {
   const video = videoAt(await read($, pick))
   const url = await playableUrlOf($, video)
-  try {
-    await $.process.run(['rundll32.exe', 'url.dll,FileProtocolHandler', url])
-  } catch (error) {
-    $.ui.toast(`Couldn't open the video: ${String(error)}`)
-    return
+  // Reuse the YouTube tab if there is one; only open a new tab when there isn't.
+  if (!(await reuseTab($, url))) {
+    try {
+      await $.process.run(['rundll32.exe', 'url.dll,FileProtocolHandler', url])
+    } catch (error) {
+      $.ui.toast(`Couldn't open the video: ${String(error)}`)
+      return
+    }
   }
   await update($, isPlaying, () => true)
   await update($, isPausedByUs, () => false)
