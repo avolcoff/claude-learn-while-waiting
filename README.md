@@ -1,6 +1,10 @@
-# learn-while-waiting
+# learn-while-waiting 🎓
 
-A mod for Claude Code Desktop that gives you something to learn while Claude works.
+**Never stare at a spinner again.**
+
+Every time you ask an AI a question or hand it a task, there's the same dead time: you hit send, then you wait. This mod turns that wait into learning time. While Claude is thinking, you're watching a short, genuinely good video on science, maths or computing, and the moment your answer or task is done, you're pulled straight back to Claude. Pass the time, learn something, lose nothing.
+
+## How it works
 
 When Claude has been working for a few seconds, the mod opens a short educational YouTube video (3Blue1Brown, Veritasium, Kurzgesagt and similar) in your browser and brings the browser to the front. When Claude finishes, it pauses the video and puts you back in the window you were in. On your next long wait it resumes the same video, or opens a new one if you closed it. Short answers never open anything.
 
@@ -10,19 +14,21 @@ It also adds a "Learn while waiting" pane showing the current video, with button
 
 ## Install
 
-At the prompt of a terminal session:
+Two commands, run in any shell:
 
 ```
-/plugin install learn-while-waiting --marketplace avolcoff/claude-learn-while-waiting
+claude plugin marketplace add avolcoff/claude-learn-while-waiting
 ```
 
-From a shell:
-
 ```
-claude plugin install learn-while-waiting --marketplace avolcoff/claude-learn-while-waiting
+claude plugin install learn-while-waiting@claude-learn-while-waiting
 ```
 
-In the desktop app, where `/plugin` does not run: click + next to the prompt box, then Plugins, Add marketplace with `avolcoff/claude-learn-while-waiting`, then Add plugin.
+Then restart Claude. In a terminal Claude Code session you can instead type `/plugin install learn-while-waiting --marketplace avolcoff/claude-learn-while-waiting`.
+
+If your `claude` command is older and doesn't know `plugin`, use the copy the Claude desktop app bundles, at `%APPDATA%\Claude\claude-code\<version>\<id>\claude.exe`.
+
+To remove it: `claude plugin uninstall learn-while-waiting`.
 
 ## Use
 
