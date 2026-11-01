@@ -1,0 +1,8 @@
+{
+  "name": "learn-while-waiting",
+  "version": "0.1.0",
+  "description": "Swaps the thinking spinner for a short educational YouTube video to watch while Claude works",
+  "author": { "name": "avolcoff" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

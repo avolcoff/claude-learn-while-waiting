@@ -1,0 +1,5 @@
+{
+  "name": "claude-learn-while-waiting",
+  "owner": { "name": "avolcoff" },
+  "plugins": [{ "name": "learn-while-waiting", "source": "./" }]
+}
