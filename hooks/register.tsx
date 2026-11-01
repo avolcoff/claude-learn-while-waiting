@@ -30,20 +30,28 @@ const VIDEOS = [
 
 // Pauses or plays the browser's media session through Windows' media
 // controls, so only the browser is touched and a paused video never toggles
-// back on. Prints how many browser sessions it changed.
+// back on. Prints how many browser sessions it changed. Pausing keeps trying
+// for a few seconds, since a video that was only just opened may not be
+// playing yet and would otherwise keep going after Claude is done.
 const mediaScript = (action: 'Pause' | 'Play' | 'Count') => `
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`1' } | Select-Object -First 1
 function Await($op, $type) { $task = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); $task.Wait(-1) | Out-Null; $task.Result }
 $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
 $manager = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-$changed = 0; $count = 0
-foreach ($s in $manager.GetSessions()) {
-  if ($s.SourceAppUserModelId -notmatch 'chrome|msedge|firefox|brave|opera|vivaldi') { continue }
-  $count++
-  $status = [string]$s.GetPlaybackInfo().PlaybackStatus
-  if ('${action}' -eq 'Pause' -and $status -eq 'Playing' -and (Await ($s.TryPauseAsync()) ([bool]))) { $changed++ }
-  if ('${action}' -eq 'Play' -and $status -eq 'Paused' -and (Await ($s.TryPlayAsync()) ([bool]))) { $changed++ }
+for ($try = 0; $try -lt ${action === 'Pause' ? 10 : 1}; $try++) {
+  $changed = 0; $count = 0; $settled = $false
+  foreach ($s in $manager.GetSessions()) {
+    if ($s.SourceAppUserModelId -notmatch 'chrome|msedge|firefox|brave|opera|vivaldi') { continue }
+    $count++
+    $status = [string]$s.GetPlaybackInfo().PlaybackStatus
+    if ('${action}' -eq 'Pause' -and $status -eq 'Paused') { $settled = $true }
+    if ('${action}' -eq 'Pause' -and $status -eq 'Playing' -and (Await ($s.TryPauseAsync()) ([bool]))) { $changed++ }
+    if ('${action}' -eq 'Play' -and $status -eq 'Paused' -and (Await ($s.TryPlayAsync()) ([bool]))) { $changed++ }
+  }
+  if ($changed -gt 0 -or $settled) { break }
+  # A video just opened with autoplay may not be playing yet: try again shortly.
+  if ($try -lt ${action === 'Pause' ? 9 : 0}) { Start-Sleep -Milliseconds 500 }
 }
 if ('${action}' -eq 'Count') { $count } else { $changed }
 `
@@ -253,7 +261,9 @@ const startVideo = async ($: EngineInterface, token: number) => {
     await update($, pick, n => n + 1)
     await watch($)
   }
-  if (await read($, isPlaying)) {
+  // The turn may have ended while the video was opening: don't pull the
+  // browser forward after Claude has already answered.
+  if (token === turnToken && (await read($, isPlaying))) {
     await showVideo($)
     didShow = true
   }
