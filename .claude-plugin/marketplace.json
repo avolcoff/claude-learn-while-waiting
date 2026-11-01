@@ -1,5 +1,16 @@
 {
   "name": "claude-learn-while-waiting",
-  "owner": { "name": "avolcoff" },
-  "plugins": [{ "name": "learn-while-waiting", "source": "./" }]
+  "owner": {
+    "name": "avolcoff"
+  },
+  "plugins": [
+    {
+      "name": "learn-while-waiting",
+      "source": "./",
+      "description": "Swaps the thinking spinner for a short educational YouTube video to watch while Claude works"
+    }
+  ],
+  "metadata": {
+    "description": "Watch a short educational video while Claude works. Windows only."
+  }
 }

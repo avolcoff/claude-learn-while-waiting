@@ -1,8 +1,18 @@
 {
   "name": "learn-while-waiting",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Swaps the thinking spinner for a short educational YouTube video to watch while Claude works",
-  "author": { "name": "avolcoff" },
+  "author": {
+    "name": "avolcoff"
+  },
   "license": "MIT",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "homepage": "https://github.com/avolcoff/claude-learn-while-waiting",
+  "repository": "https://github.com/avolcoff/claude-learn-while-waiting",
+  "keywords": [
+    "learning",
+    "youtube",
+    "spinner",
+    "windows"
+  ]
 }

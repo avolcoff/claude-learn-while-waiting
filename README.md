@@ -14,6 +14,10 @@ It also adds a "Learn while waiting" pane showing the current video, with button
 
 ## Install
 
+The mod is a Claude Code plugin and works on **Windows** only. It installs on other systems but stays quiet and does nothing.
+
+### Claude Code in a terminal
+
 Two commands, run in any shell:
 
 ```
@@ -24,9 +28,28 @@ claude plugin marketplace add avolcoff/claude-learn-while-waiting
 claude plugin install learn-while-waiting@claude-learn-while-waiting
 ```
 
-Then restart Claude. In a terminal Claude Code session you can instead type `/plugin install learn-while-waiting --marketplace avolcoff/claude-learn-while-waiting`.
+Then restart Claude. Inside a running session you can instead type:
+
+```
+/plugin marketplace add avolcoff/claude-learn-while-waiting
+/plugin install learn-while-waiting@claude-learn-while-waiting
+```
 
 If your `claude` command is older and doesn't know `plugin`, use the copy the Claude desktop app bundles, at `%APPDATA%\Claude\claude-code\<version>\<id>\claude.exe`.
+
+### Claude desktop app (Code tab)
+
+Open a Code session and run the two `/plugin` commands above in the prompt, or run the two `claude plugin` commands in any terminal. Then start a new session so the plugin loads.
+
+### VS Code extension
+
+Run the same two `/plugin` commands in the Claude Code panel, then reload the window.
+
+### Not supported
+
+- **Claude Cowork:** it runs tasks in a sandbox that isn't your Windows machine, so the mod can't open or control your browser there.
+- **macOS and Linux:** the mod relies on Windows tools (PowerShell and Windows media controls).
+- **Claude.ai chat, the Claude mobile app, the API and other AI tools:** they can't load Claude Code plugins.
 
 To remove it: `claude plugin uninstall learn-while-waiting`.
 
@@ -56,6 +79,8 @@ It does not read your messages, your files or Claude's replies. The source is in
 
 ## Limits
 
+- It needs a recent Claude Code (2.1.309 or later loads it). Older versions report "failed to load"; update Claude Code first.
+- When Claude finishes, it pauses every browser video that is playing, not only the one it opened, so music playing in another tab is paused too.
 - The video plays in your browser, not inside Claude: mods have no element that can host a web player.
 - It finds the video by looking for a browser window whose active tab is titled YouTube. If you move to another tab in that window, it can't find the video, and may open a new one.
 - The video is the top YouTube search result for each title, so a removed or renamed video can be replaced by a similar one. If YouTube changes its search page, the mod opens the search results instead, which don't autoplay.

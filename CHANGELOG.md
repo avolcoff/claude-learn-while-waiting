@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Fixed: turning the mod off with `/learn off` while a wait was running still opened a video when the wait ended.
+- Fixed: `/learn wait 15abc` and `/learn wait 1.5` were accepted as 15 and 1; only whole seconds from 0 to 300 are now.
+- The test suite grew from 6 to 43 tests: resuming and replacing the video, failed opens, pauses and resumes, YouTube being unreachable, saved and damaged settings, the spinner and pane on every surface, and `/learn` input limits.
+- The marketplace now has a description, and the manifest has a homepage, repository and keywords.
+
 ## 0.2.0
 
 - A video now opens only after Claude has been working for a few seconds (default 8), so short answers no longer flash the browser. Set it with `/learn wait <seconds>`.

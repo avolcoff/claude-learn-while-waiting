@@ -230,7 +230,8 @@ const MAX_WAIT_SECONDS = 300
 // The video side of a turn that has run long enough: resume the paused video,
 // else open the next one, and bring the browser forward.
 const startVideo = async ($: EngineInterface, token: number) => {
-  if (token !== turnToken) {
+  // Turning the mod off during the wait cancels the video that wait was for.
+  if (token !== turnToken || !(await read($, isEnabled))) {
     return
   }
   await rememberWindow($)
@@ -307,8 +308,9 @@ export const register: Register = on => {
     if (word === 'on' || word === 'off') {
       await setEnabled($, word === 'on')
     } else if (word === 'wait') {
-      const seconds = Number.parseInt(arg, 10)
-      if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_WAIT_SECONDS) {
+      // Whole seconds only: "15abc" or "1.5" is a typo, not 15 or 1.
+      const seconds = /^\d+$/.test(arg) ? Number.parseInt(arg, 10) : Number.NaN
+      if (!Number.isFinite(seconds) || seconds > MAX_WAIT_SECONDS) {
         return { text: `Usage: /learn wait <seconds, 0 to ${MAX_WAIT_SECONDS}>` }
       }
       await update($, waitSeconds, () => seconds)
