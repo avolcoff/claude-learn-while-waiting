@@ -66,6 +66,8 @@ const isWorking = atom({ plugin: 'learn-while-waiting', key: 'isWorking' } as co
 const isPlaying = atom({ plugin: 'learn-while-waiting', key: 'isPlaying' } as const, false)
 const isPausedByUs = atom({ plugin: 'learn-while-waiting', key: 'isPausedByUs' } as const, false)
 // The window the person was in before the browser came forward, to go back to.
+const isEnabled = atom({ plugin: 'learn-while-waiting', key: 'isEnabled' } as const, true)
+const waitSeconds = atom({ plugin: 'learn-while-waiting', key: 'waitSeconds' } as const, 8)
 const returnTo = atom({ plugin: 'learn-while-waiting', key: 'returnTo' } as const, '')
 
 // 'save' prints the window that has the focus; 'front' raises the browser
@@ -208,75 +210,147 @@ const setPlayback = async ($: EngineInterface, action: 'Pause' | 'Play', isLoud 
   return false
 }
 
+// Everything that starts a process runs one after another in the background,
+// so a turn never waits on PowerShell.
+let queue: Promise<unknown> = Promise.resolve()
+const enqueue = (job: () => Promise<unknown>) => {
+  queue = queue.then(job).catch(() => undefined)
+}
+
+// The window helpers need Windows; set at session start.
+let isWindows = false
+// Which turn a pending start belongs to; a finished turn cancels it.
+let turnToken = 0
+// Whether this turn brought the browser forward, so only then is it sent back.
+let didShow = false
+
+const DEFAULT_WAIT_SECONDS = 8
+const MAX_WAIT_SECONDS = 300
+
+// The video side of a turn that has run long enough: resume the paused video,
+// else open the next one, and bring the browser forward.
+const startVideo = async ($: EngineInterface, token: number) => {
+  if (token !== turnToken) {
+    return
+  }
+  await rememberWindow($)
+  // A closed tab or window leaves nothing to resume: start over with a new one.
+  const exists = await hasVideo($)
+  if (!exists) {
+    await update($, isPlaying, () => false)
+    await update($, isPausedByUs, () => false)
+  }
+  if (exists && (await read($, isPausedByUs))) {
+    await update($, isPausedByUs, () => false)
+    if (await setPlayback($, 'Play', false)) {
+      await update($, isPlaying, () => true)
+    } else {
+      await update($, pick, n => n + 1)
+      await watch($)
+    }
+  } else if (!(exists && (await read($, isPlaying)))) {
+    await update($, pick, n => n + 1)
+    await watch($)
+  }
+  if (await read($, isPlaying)) {
+    await showVideo($)
+    didShow = true
+  }
+}
+
+// The turn is over: pause the video, and go back only if the browser came forward.
+const finishVideo = async ($: EngineInterface) => {
+  if (await read($, isPlaying)) {
+    await update($, isPlaying, () => false)
+    if ((await hasVideo($)) && (await setPlayback($, 'Pause'))) {
+      await update($, isPausedByUs, () => true)
+      $.ui.toast("Claude's back, so the video is paused")
+    }
+  }
+  if (didShow) {
+    didShow = false
+    await hideVideo($)
+  }
+}
+
+const setEnabled = async ($: EngineInterface, value: boolean) => {
+  await update($, isEnabled, () => value)
+  await $.store.set('learn.enabled', value)
+}
+
+const statusText = async ($: EngineInterface) =>
+  `Learn-while-waiting is ${(await read($, isEnabled)) ? 'on' : 'off'}; the video starts after ${await read($, waitSeconds)}s of waiting.`
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    isWindows = (await $.env.get('OS')) === 'Windows_NT'
     await $.command.register({
       name: 'learn',
-      description: 'Open the Learn-while-waiting pane with a video to watch',
+      description: 'Learn while waiting: /learn opens the pane, /learn on|off, /learn wait <seconds>',
     })
     await update($, pick, () => Math.floor(Math.random() * VIDEOS.length))
+    const savedEnabled = await $.store.get('learn.enabled')
+    await update($, isEnabled, () => savedEnabled !== false)
+    const savedWait = await $.store.get('learn.wait')
+    const wait =
+      typeof savedWait === 'number' && Number.isInteger(savedWait) && savedWait >= 0 && savedWait <= MAX_WAIT_SECONDS
+        ? savedWait
+        : DEFAULT_WAIT_SECONDS
+    await update($, waitSeconds, () => wait)
     void $.ui.open({ id: PANE, title: 'Learn while waiting' })
 
     return next(e)
   })
 
-  on('command.run', { command: 'learn' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Learn while waiting' })
+  on('command.run', { command: 'learn' }, async ($, e) => {
+    const [word = '', arg = ''] = e.args.trim().split(/\s+/)
+    if (word === 'on' || word === 'off') {
+      await setEnabled($, word === 'on')
+    } else if (word === 'wait') {
+      const seconds = Number.parseInt(arg, 10)
+      if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_WAIT_SECONDS) {
+        return { text: `Usage: /learn wait <seconds, 0 to ${MAX_WAIT_SECONDS}>` }
+      }
+      await update($, waitSeconds, () => seconds)
+      await $.store.set('learn.wait', seconds)
+    } else {
+      await $.ui.open({ id: PANE, title: 'Learn while waiting' })
+    }
+    const note = isWindows ? '' : ' It only works on Windows, so nothing will open here.'
 
-    return { text: 'Learn-while-waiting pane opened.' }
+    return { text: `${await statusText($)}${note}` }
   })
 
-  // Claude is thinking again: resume the video it paused, else start a fresh
-  // one for every turn the person starts.
+  // Claude is working: after the wait, open or resume the video. This hook only
+  // sets a timer, so it never holds the turn up.
   on('turn.start', async ($, e, next) => {
-    await rememberWindow($)
-    // A closed tab or window leaves nothing to resume: start over with a new one.
-    const exists = await hasVideo($)
-    if (!exists) {
-      await update($, isPlaying, () => false)
-      await update($, isPausedByUs, () => false)
-    }
-    if (exists && (await read($, isPausedByUs))) {
-      await update($, isPausedByUs, () => false)
-      if (await setPlayback($, 'Play', false)) {
-        await update($, isPlaying, () => true)
-        void showVideo($)
-      } else if (e.text !== '') {
-        // Nothing left to resume: open the next video.
-        await update($, pick, n => n + 1)
-        void watch($).then(() => showVideo($))
+    if (e.agentId === undefined) {
+      await update($, isWorking, () => true)
+      if (isWindows && e.text !== '' && (await read($, isEnabled))) {
+        turnToken += 1
+        const token = turnToken
+        const seconds = await read($, waitSeconds)
+        $.clock.after(seconds * 1000, () => enqueue(() => startVideo($, token)))
       }
-    } else if (exists && (await read($, isPlaying))) {
-      void showVideo($)
-    } else if (e.text !== '') {
-      await update($, pick, n => n + 1)
-      void watch($).then(() => showVideo($))
     }
-    await update($, isWorking, () => true)
 
     return next(e)
   })
 
-  // Claude is back: pause the video the person started while it worked.
+  // Claude is back: cancel a start still waiting, and pause the video.
   on('turn.complete', async ($, e, next) => {
-    await update($, isWorking, () => false)
-    if (await read($, isPlaying)) {
-      await update($, isPlaying, () => false)
-      if (!(await hasVideo($))) {
-        // The person closed it; nothing to pause.
-      } else if (await setPlayback($, 'Pause')) {
-        await update($, isPausedByUs, () => true)
-        $.ui.toast("Claude's back, so the video is paused")
-      }
+    if (e.agentId === undefined) {
+      await update($, isWorking, () => false)
+      turnToken += 1
+      enqueue(() => finishVideo($))
     }
-    await hideVideo($)
 
     return next(e)
   })
 
   // The thinking row: keep the engine's word, add the video beside it.
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
-    if (e.surface === 'terminal') {
+    if (e.surface === 'terminal' || !isWindows || !(await read($, isEnabled))) {
       return next(e)
     }
     const { Box, Text, Button } = $.ui.resolve(e)
@@ -287,7 +361,7 @@ export const register: Register = on => {
       <Box flexDirection="row" gap={1}>
         <Text dimColor>{e.props.message ?? e.props.word}…</Text>
         <Text>🎓 {video.title} ({video.channel})</Text>
-        {!playing && <Button key="watch" label="▶ Watch" onPress={() => watch($)} />}
+        {!playing && <Button key="watch" label="▶ Watch" onPress={() => enqueue(() => watch($))} />}
       </Box>
     )
   })
@@ -298,11 +372,14 @@ export const register: Register = on => {
     const working = await read($, isWorking)
     const playing = await read($, isPlaying)
     const paused = await read($, isPausedByUs)
+    const enabled = await read($, isEnabled)
+    const seconds = await read($, waitSeconds)
 
     return (
       <Box flexDirection="column" gap={1}>
+        {!isWindows && <Text>Windows only: nothing will open on this system.</Text>}
         <Text dimColor>
-          {working ? 'Claude is working, so learn something meanwhile:' : 'Up next time Claude thinks:'}
+          {working ? 'Claude is working, so learn something meanwhile:' : 'Up next time Claude takes a while:'}
         </Text>
         <Text bold>{video.title}</Text>
         <Text dimColor>{video.channel}</Text>
@@ -319,7 +396,7 @@ export const register: Register = on => {
               }}
             />
           ) : (
-            !playing && <Button key="watch" label="▶ Watch on YouTube" onPress={() => watch($)} />
+            !playing && <Button key="watch" label="▶ Watch on YouTube" onPress={() => enqueue(() => watch($))} />
           )}
           <Button
             key="next"
@@ -330,6 +407,12 @@ export const register: Register = on => {
               await update($, isPlaying, () => false)
             }}
           />
+        </Box>
+        <Box flexDirection="row" gap={1}>
+          <Text dimColor>
+            {enabled ? `On: starts after ${seconds}s of waiting` : 'Off: no video will open'}
+          </Text>
+          <Button key="toggle" label={enabled ? 'Turn off' : 'Turn on'} onPress={() => setEnabled($, !enabled)} />
         </Box>
       </Box>
     )
